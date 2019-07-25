@@ -56,10 +56,10 @@ ui <- dashboardPage(skin = "yellow",
       
       #Data Exploration Tab
       tabItem(tabName = "eda",
-              uiOutput("edatitle"),
               h4("Summary of each state's participant count"),
               dataTableOutput("EDABigTable"),
               br(),
+              uiOutput("edatitle"),
               h3("Select a State/Region to analyze"),
               selectizeInput("state1", "State", selected = "North Carolina", choices = levels(as.factor(brfss2013$State))),
               h3("Select a variable to examine"),
@@ -93,8 +93,23 @@ ui <- dashboardPage(skin = "yellow",
       
       #Modeling data tab
       tabItem(tabName = "modeling",
-              fluidRow(
-              "Believe it or not, this is to be developed...")),
+             h3("Select a State/Region to analyze"),
+             selectizeInput("state3", "State", selected = "North Carolina", choices = levels(as.factor(brfss2013$State))),
+             selectizeInput("regressiontype", "Select Regression Type", selected = 'Linear', choices = c('Linear', 'Logistic')),
+             
+             #selecting response and predictor for Linear regression
+             conditionalPanel(condition = "input.regressiontype == 'Linear'", 
+                              uiOutput('linearregressionchoiceout'),
+                              selectizeInput('linpredictor', 'Linear Regression Predictor', choices = names(brfss2013 %>% select(-State)))),
+
+             
+             #selecting response and predictor for Logistic regression
+             conditionalPanel(condition = "input.regressiontype == 'Logistic'",
+                              uiOutput('logisticregressionchoiceout'),
+                              selectizeInput('logpredictor', 'Logistic Regression Predictor', choices = names(brfss2013 %>% select(-State)))),
+  
+             textOutput('regressionequation')
+              ),
       
       #Data Table Tab
       tabItem(tabName = "table",
@@ -114,7 +129,7 @@ ui <- dashboardPage(skin = "yellow",
 
 server <- function(input, output, session) {
   
-
+withMathJax() #for real math hours
   
 #####################DATA EXPLORATION TAB FUNCTIONS####
  
@@ -180,7 +195,76 @@ server <- function(input, output, session) {
 
   
 ########################DATA MODELING tab functions####
-
+  
+  #subsets data by State, removing State from options
+  getregData <- reactive({
+    newregData <- brfss2013 %>% filter(State == input$state2) %>% select(-State)  
+  })
+  
+  #next two reactives subset data further, removing observations with missing values in response varaible
+  outcome <- reactive({
+    if (input$regressiontype == 'Linear'){
+    hold <- paste0(input$linchoice)
+    }
+    else{hold <- paste0(input$logchoice)}
+  })
+  
+  getregData2 <- reactive({
+    newregData2 <- na.omit(getregData()$outcome())
+  })
+  
+  #show options for simple linear regression
+  output$linearregressionchoiceout <- renderUI({
+    brfssnumeric <- na.omit(brfss2013[,sapply(brfss2013,is.numeric)])
+    colnames <- names(brfssnumeric)
+    selectInput('linchoice', 'Linear Regression Outcome', colnames)
+  })
+  
+  output$logisticregressionchoiceout <- renderUI({
+    brfsscharacter <- na.omit(brfss2013[,sapply(brfss2013,is.character)])
+    colnames <- names(brfsscharacter %>% select(-State))
+    selectInput('logchoice', 'Logistic Regression Outcome', colnames)
+  })
+  
+  
+  regressionformula <- reactive({
+    #set regression formula to linear default if Linear option chosen
+    if (input$regressiontype == 'Linear'){
+        formula <- paste0(input$linchoice, " ~ ", input$linpredictor)
+    }
+    
+    #regression formula to binomial if Logistic option chosen
+    else{formula <- paste0(input$logchoice, "~ ", input$logpredictor)}
+    
+    
+    
+  })
+  #run regression model
+  regressionmodel <- reactive({
+    #linear regression model
+    if (input$regressiontype == 'Linear'){
+        model <- lm(regressionformula(), data = getregData())
+    }
+    
+    #logistic regression model
+    else{model <- lm(regressionformula(), data = getregData(), family = "binomial")}
+  })
+  
+  output$regressionequation <- renderText({
+    if (input$regressiontype == 'Linear'){
+      for(a in 1:length(names(regressionmodel()$coefficients))){
+        if (a == 1){
+          string <- paste(names(regressionmodel()$coefficients[a]), round(regressionmodel()$coefficients[a], 2))
+        }
+        else if (a > 1 & a < length(names(regressionmodel()$coefficients))){
+          string <- paste(string, "+", names(regressionmodel()$coefficients[a]), round(regressionmodel()$coefficients[a], 2))
+        }
+        else{
+          return(paste(string, "+", names(regressionmodel()$coefficients[a]), round(regressionmodel()$coefficients[a])))
+        }
+      }
+    }
+  })
   
   
   
