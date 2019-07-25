@@ -7,7 +7,6 @@ library(shinydashboard)
 #read in brfss data once with fast read, then remove column number column
 brfss2013 <- tbl_df(fread("./brfss2013.csv", header = T, sep = ','))   #reads in big ole csv file
 
-
 ui <- dashboardPage(skin = "yellow",
   dashboardHeader(title = "BRFSS (...from 2013)"),
   dashboardSidebar(
@@ -108,7 +107,13 @@ ui <- dashboardPage(skin = "yellow",
                               uiOutput('logisticregressionchoiceout'),
                               selectizeInput('logpredictor', 'Logistic Regression Predictor', choices = names(brfss2013 %>% select(-State)))),
   
-             textOutput('regressionequation')
+             textOutput('regressionequation'),
+             conditionalPanel(condition = "regpredictorcheck() == 'TRUE'",
+                              textInput('linpredictinputn', "Enter prediction value")),
+             conditionalPanel(condition = "regpredictorcheck() == 'FALSE'",
+                              uiOutput('linpredictinputc'))
+                              
+             #uiOutput('regressionpredictinput')
               ),
       
       #Data Table Tab
@@ -196,6 +201,7 @@ withMathJax() #for real math hours
   
 ########################DATA MODELING tab functions####
   
+  #PART 1: Simple Linear Regression 
   #subsets data by State, removing State from options
   getregData <- reactive({
     newregData <- brfss2013 %>% filter(State == input$state2) %>% select(-State)  
@@ -250,6 +256,7 @@ withMathJax() #for real math hours
     else{model <- lm(regressionformula(), data = getregData(), family = "binomial")}
   })
   
+  #output a mathJax string of the equation at hand
   output$regressionequation <- renderText({
     if (input$regressiontype == 'Linear'){
       for(a in 1:length(names(regressionmodel()$coefficients))){
@@ -264,6 +271,32 @@ withMathJax() #for real math hours
         }
       }
     }
+  })
+  
+  #for simple linear regression prediction
+
+  regpredictor <- reactive({
+    if (input$regressiontype == 'Linear'){
+      hold2 <- paste(input$linpredictor)
+    }
+    else{hold2 <- paste(input$logpredictor)}
+  })
+  
+  regcheckdata <- reactive({
+    hold3 <- getregData2()$regpredictor()
+  })
+  
+  regpredictorcheck <- reactive({
+    check <- is.character(regcheckdata())
+  })
+  
+  regcategorychoice <- reactive({
+    choice <- c(unique(getregData2()$regpredictor()))
+  })
+  
+  
+ output$linpredictinputc <- renderUI({
+     selectizeInput('linpredictinputc', "Enter prediction category", choices = regcategorychoice())
   })
   
   
