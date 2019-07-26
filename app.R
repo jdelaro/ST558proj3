@@ -25,14 +25,14 @@ ui <- dashboardPage(skin = "yellow",
                                 fluidRow(
                                   h3("Intro to the BRFSS App"),
                                   "The Behavioral Risk Factor Surveillance System is a major project undertaken by the CDC every year to understand the relationships
-                between factors such as dieting, drug use, and social perceptions and health outcomes such as heart risk and obesity. More information
-                can be found on the BRFSS website by clicking", a("here.", href="https://www.cdc.gov/brfss/about/index.htm"),
+                                  between factors such as dieting, drug use, and social perceptions and health outcomes such as heart risk and obesity. More information
+                                  can be found on the BRFSS website by clicking", a("here.", href="https://www.cdc.gov/brfss/about/index.htm"),
                                   br(),
                                   br(),
                                   "Fortunately, I was entrusted with the 2013 edition of the BRFSS dataset while taking a course at Duke, in order to practice exploratory data
-                analysis. The purpose of this app will be to utilize several new abilities taught in my data science course to do a little
-                more than basic EDA. While the original dataset has 330 variables, since most subscales were calculated after interviews and some questions are repeated, I subsetted the
-                variables to be included in this app, leaving 61 for analysis. A description of the full scope of the survey and its variables can be found", a("here.", href="https://www.cdc.gov/brfss/annual_data/annual_2013.html"),
+                                  analysis. The purpose of this app will be to utilize several new abilities taught in my data science course to do a little
+                                  more than basic EDA. While the original dataset has 330 variables, since most subscales were calculated after interviews and some questions are repeated, I subsetted the
+                                  variables to be included in this app, leaving 61 for analysis. A description of the full scope of the survey and its variables can be found", a("here.", href="https://www.cdc.gov/brfss/annual_data/annual_2013.html"),
                                   br(),
                                   br(),
                                   "There are four panels to the left that will let us do different things with our data set.",
@@ -40,18 +40,18 @@ ui <- dashboardPage(skin = "yellow",
                                   br(),
                                   "The Data Exploration tab will let you create a few tables and graphs with the data. Since the data set is ", em("a small 492,773 observations"),
                                   "you'll have the ability to subset this dataset by State. Each state has several thousand participants apiece, so you'll be able to not only
-                look at descriptive information of each state with tables and graphs, but you can compare two states to each other on some set of relationships as well",
+                                  look at descriptive information of each state with tables and graphs, but you can compare two states to each other on some set of relationships as well",
                                   br(),
                                   br(),
                                   "The Clustering tab will let you visualize and set clusters for subsets of data. Good luck!",
                                   br(),
                                   br(),
                                   "The Data modeling tab will let you, well, model the data with supervised learning! Here you'll be able to specify an outcome of interest, how many variables to use, and for seeing
-                how accurate the best three models were in generating a model. On the menu for what methods to use, simple linear regression (yes this is considered a machine learning method, I wasn't sure but since this project is open ended I had a cool programming idea and ran with it) and", em("k"), "nearest-neighbors are on the house today.",
+                                  how accurate the best three models were in generating a model. On the menu for what methods to use, simple linear regression (yes this is considered a machine learning method, I wasn't sure but since this project is open ended I had a cool programming idea and ran with it) and", em("k"), "nearest-neighbors are on the house today.",
                                   br(),
                                   br(),
                                   "The Data Table tab will give a nice table to look at, with the ability to subset the data by State, by gender, and by age group."
-                                )),
+                                  )),
                         
                         #Data Exploration Tab
                         tabItem(tabName = "eda",
@@ -96,6 +96,7 @@ ui <- dashboardPage(skin = "yellow",
                                 selectizeInput("state3", "State", selected = "North Carolina", choices = levels(as.factor(brfss2013$State))),
                                 uiOutput('linearregressionchoiceout'),
                                 selectizeInput('linpredictor', 'Linear Regression Predictor', choices = names(brfss2013 %>% select(-State))),
+                                withMathJax(),
                                 uiOutput('regMathJax'),
                                 br(),
                                 uiOutput('regpredictinput'),
@@ -113,7 +114,7 @@ ui <- dashboardPage(skin = "yellow",
                                 downloadButton("downloadFull", "Download All Data"),
                                 div(style = 'overflow-x: scroll', dataTableOutput("tabtable"))
                         )
-                      )
+                        )
                     )
 )
 
@@ -185,106 +186,7 @@ server <- function(input, output, session) {
   })
   
   
-  ########################DATA MODELING tab functions####
   
-  #PART 1: Simple Linear Regression 
-  #subsets data by State, removing State from options
-  getregData <- reactive({
-    newregData <- brfss2013 %>% filter(State == input$state2) %>% select(-State)  
-  })
-  
-  #next two reactives subset data further, removing observations with missing values in response varaible
-  outcome <- reactive({
-      hold <- paste0(input$linchoice)
-
-  })
-  
-  #show options for simple linear regression
-  output$linearregressionchoiceout <- renderUI({
-    brfssnumeric <- na.omit(brfss2013[,sapply(brfss2013,is.numeric)])
-    colnames <- names(brfssnumeric)
-    selectInput('linchoice', 'Linear Regression Outcome', colnames)
-  })
-
-  #create formula portion of lm function here
-  regressionformula <- reactive({
-      formula <- paste0(input$linchoice, " ~ ", input$linpredictor)
-  })
-  #run regression model
-  regressionmodel <- reactive({
-    #linear regression model
-      model <- lm(regressionformula(), data = getregData())
-  })
-  
-  #output a mathJax string of the equation at hand
-  regressionequation <- reactive({
-      for(a in 1:length(names(regressionmodel()$coefficients))){
-        if (a == 1){
-          string <- paste0("$$", input$linchoice, " \\approx ", round(regressionmodel()$coefficients[a], 2))
-        }
-        else if (a > 1 & a < length(names(regressionmodel()$coefficients))){
-          string <- paste(string, " + ", round(regressionmodel()$coefficients[a], 2), " * ", "X", (a-1), "_", names(regressionmodel()$coefficients[a]) )
-        }
-        else{
-          return(paste(string, " + ", round(regressionmodel()$coefficients[a], 2), " * ", "X", (a-1), "_", names(regressionmodel()$coefficients[a]), "$$"))
-        }
-      }
-  
-  })
-  
-  output$regMathJax <- renderUI({
-    withMathJax(
-      helpText(regressionequation())
-    )
-  })
-  
-  #for simple linear regression prediction
-  
-  regcheckdata <- reactive({
-    hold2 <- unique(getregData()[,input$linpredictor])
-  })
-
-  output$regpredictinput <- renderUI({
-    brfssnumericreg <- na.omit(getregData()[,sapply(getregData(),is.numeric)])
-    numnames <- names(brfssnumericreg)
-    
-    brfsscharacterreg <- na.omit(getregData()[,sapply(getregData(),is.character)])
-    colnames <- names(brfsscharacterreg)
-    
-    if (input$linpredictor %in% numnames){
-      numcheck <- TRUE
-    }
-    else{numcheck <- FALSE}    
-    
-    if (numcheck == TRUE){
-      textInput("numpredict", "Enter value for prediction")
-    }
-    else{selectInput("charpredict", "Enter prediction category", choices = regcheckdata())}
-      
-  })
-  
-  output$regpredictfit <- renderPrint({
-    brfssnumericreg <- na.omit(getregData()[,sapply(getregData(),is.numeric)])
-    numnames <- names(brfssnumericreg)
-    
-    brfsscharacterreg <- na.omit(getregData()[,sapply(getregData(),is.character)])
-    colnames <- names(brfsscharacterreg)
-    
-    if (input$linpredictor %in% numnames){
-      numcheck <- TRUE
-    }
-    else{numcheck <- FALSE}
-    
-    numframe <- data.frame(input$linpredictor = input$numpredict)
-    charframe <- data.frame(input$linpredctor =  input$charpredict)
-    
-    if(numcheck == TRUE){
-      predict(regressionmodel(), newdata = numframe, se.fit = TRUE)
-    }
- 
-    else{predict(regressionmodel(), newdata = charframe, se.fit = TRUE)}
-    
-  })
   
   
   
@@ -398,6 +300,118 @@ server <- function(input, output, session) {
     }
   )
   
+  ########################DATA MODELING tab functions####
+  
+  #PART 1: Simple Linear Regression 
+  #subsets data by State, removing State from options
+  getregData <- reactive({
+    newregData <- brfss2013 %>% filter(State == input$state3) 
+  })
+  
+  #next two reactives subset data further, removing observations with missing values in response varaible
+  outcome <- reactive({
+    hold <- paste0(input$linchoice)
+    
+  })
+  
+  #show options for simple linear regression
+  output$linearregressionchoiceout <- renderUI({
+    brfssnumeric <- na.omit(brfss2013[,sapply(brfss2013,is.numeric)])
+    colnames <- names(brfssnumeric)
+    selectInput('linchoice', 'Linear Regression Outcome', colnames)
+  })
+  
+  #create formula portion of lm function here
+  regressionformula <- reactive({
+    formula <- paste0(input$linchoice, " ~ ", input$linpredictor)
+  })
+  
+  #run regression model
+  regressionmodel <- reactive({
+    #linear regression model
+    model <- lm(regressionformula(), data = getregData())
+  })
+  
+  #output a mathJax string of the equation at hand
+  regressionequation <- reactive({
+    for(a in 1:length(names(regressionmodel()$coefficients))){
+      if (a == 1){
+        string <- paste0('$$', input$linchoice, ' \\approx ', round(regressionmodel()$coefficients[a], 2))
+      }
+      else if (a > 1 & a < length(names(regressionmodel()$coefficients))){
+        string <- paste0(string, ' + ', round(regressionmodel()$coefficients[a], 2), ' * ', 'X', (a-1), '_', names(regressionmodel()$coefficients[a]) )
+      }
+      else{
+        return(paste0(string, ' + ', round(regressionmodel()$coefficients[a], 2), ' * ', 'X', (a-1), '_', names(regressionmodel()$coefficients[a]), "$$"))
+      }
+    }
+    
+  })
+  
+  output$regMathJax <- renderUI({
+    withMathJax(
+      helpText(regressionequation())
+    )
+  })
+  
+  #for simple linear regression prediction
+  
+  regcheckdata <- reactive({
+    hold2 <- unique(getregData()[,input$linpredictor])
+  })
+  
+  output$regpredictinput <- renderUI({
+    brfssnumericreg <- na.omit(getregData()[,sapply(getregData(),is.numeric)])
+    numnames <- names(brfssnumericreg)
+    
+    brfsscharacterreg <- na.omit(getregData()[,sapply(getregData(),is.character)])
+    colnames <- names(brfsscharacterreg)
+    
+    if (input$linpredictor %in% numnames){
+      numcheck <- TRUE
+    }
+    else{numcheck <- FALSE}    
+    
+    if (numcheck == TRUE){
+      textInput("numpredict", "Enter value for prediction", value = 3)
+    }
+    else if (numcheck == FALSE){
+      selectInput("charpredict", "Enter prediction category", choices = regcheckdata())
+      }
+    
+  })
+  
+  output$regpredictfit <- renderPrint({
+    brfssnumericreg <- na.omit(getregData()[,sapply(getregData(),is.numeric)])
+    numnames <- names(brfssnumericreg)
+    
+    brfsscharacterreg <- na.omit(getregData()[,sapply(getregData(),is.character)])
+    colnames <- names(brfsscharacterreg)
+    
+    if (input$linpredictor %in% numnames){
+      numcheck <- TRUE
+    }
+    else{numcheck <- FALSE}
+    
+    #create prediction data frame for numeric data
+    if(numcheck == TRUE){
+      numframe <- data.frame(var = input$numpredict)
+      colnames(numframe) <- input$linpredictor
+    }
+    
+    #create prediction data frame for character data
+    else{
+      charframe <- data.frame(var =  input$charpredict)
+      colnames(charframe) <- input$linpredictor
+    }
+    
+    if(numcheck == TRUE){
+      predict(regressionmodel(), newdata = numframe, se.fit = TRUE)
+    }
+    
+    else{predict(regressionmodel(), newdata = charframe, se.fit = TRUE)}
+    
+  })
   
   ######################DATA TABLE tab functions####
   
