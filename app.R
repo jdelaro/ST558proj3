@@ -3,9 +3,13 @@ library(data.table)
 library(DT)
 library(shiny)
 library(shinydashboard)
+library(randomForest)
+library(caret)
 
 #read in brfss data once with fast read, then remove column number column
 brfss2013 <- tbl_df(fread("./brfss2013.csv", header = T, sep = ','))   #reads in big ole csv file
+
+set.seed(31594) #set seed for machine learning shenanigans
 
 ui <- dashboardPage(skin = "yellow",
                     dashboardHeader(title = "BRFSS (...from 2013)"),
@@ -51,7 +55,7 @@ ui <- dashboardPage(skin = "yellow",
                                   br(),
                                   br(),
                                   "The Data Table tab will give a nice table to look at, with the ability to subset the data by State, by gender, and by age group."
-                                  )),
+                                )),
                         
                         #Data Exploration Tab
                         tabItem(tabName = "eda",
@@ -95,12 +99,17 @@ ui <- dashboardPage(skin = "yellow",
                                 h3("Select a State/Region to analyze"),
                                 selectizeInput("state3", "State", selected = "North Carolina", choices = levels(as.factor(brfss2013$State))),
                                 uiOutput('linearregressionchoiceout'),
-                                selectizeInput('linpredictor', 'Linear Regression Predictor', choices = names(brfss2013 %>% select(-State))),
+                                h4("Simple Linear Regression Modeling"),
+                                selectizeInput('linpredictor', 'Choose Predictor Variable', choices = names(brfss2013 %>% select(-State))),
                                 withMathJax(),
                                 uiOutput('regMathJax'),
                                 br(),
                                 uiOutput('regpredictinput'),
-                                verbatimTextOutput('regpredictfit')
+                                verbatimTextOutput('regpredictfit'),
+                                h4("Random Forest Modeling"),
+                                numericInput('treenum', 'Choose number of trees for Random Forest model', min = 1, max = length(names(brfss2013)), value = 3),
+                                verbatimTextOutput('rfresults')
+                              
                         ),
                         
                         #Data Table Tab
@@ -114,7 +123,7 @@ ui <- dashboardPage(skin = "yellow",
                                 downloadButton("downloadFull", "Download All Data"),
                                 div(style = 'overflow-x: scroll', dataTableOutput("tabtable"))
                         )
-                        )
+                      )
                     )
 )
 
@@ -168,21 +177,16 @@ server <- function(input, output, session) {
   
   edag <- reactive({
     if (input$edavar2check){
-      g <- ggplot(getedaData1, aes(x = input$edavar1, y = input$edavar2))
+      g <- ggplot(getedaData1(), aes(x = input$edavar1, y = input$edavar2))
     }
     else{
-      g <- ggplot(getedaData1, aes(x = input$edavar1))
+      g <- ggplot(getedaData1(), aes(x = input$edavar1))
     }
   })
   
   
   output$basicgraph <- renderPlot({
-    if (input$edavar2check){
-      plot(getedaData1)
-    }
-    else{
-      plot(getedaData1)
-    }
+      plot(getedaData1())
   })
   
   
@@ -302,7 +306,8 @@ server <- function(input, output, session) {
   
   ########################DATA MODELING tab functions####
   
-  #PART 1: Simple Linear Regression 
+  #####PART 1: Simple Linear Regression
+  
   #subsets data by State, removing State from options
   getregData <- reactive({
     newregData <- brfss2013 %>% filter(State == input$state3) 
@@ -318,7 +323,7 @@ server <- function(input, output, session) {
   output$linearregressionchoiceout <- renderUI({
     brfssnumeric <- na.omit(brfss2013[,sapply(brfss2013,is.numeric)])
     colnames <- names(brfssnumeric)
-    selectInput('linchoice', 'Linear Regression Outcome', colnames)
+    selectInput('linchoice', 'Choose outcome variable', colnames)
   })
   
   #create formula portion of lm function here
@@ -377,7 +382,7 @@ server <- function(input, output, session) {
     }
     else if (numcheck == FALSE){
       selectInput("charpredict", "Enter prediction category", choices = regcheckdata())
-      }
+    }
     
   })
   
@@ -412,6 +417,46 @@ server <- function(input, output, session) {
     else{predict(regressionmodel(), newdata = charframe, se.fit = TRUE)}
     
   })
+  
+  ##### PART 2: Random Forest algorithm time!
+  
+  getrfData <- reactive({
+    dataset <- getregData()[,sapply(getregData(),is.numeric)] #stick to numeric columns for now
+    dataset <- na.omit(dataset[, colSums(is.na(dataset)) != nrow(dataset)])     #eliminate any columns that are all missings
+  })
+  
+  rftrainvalues <- reactive({
+    trainvalues <- sample(1:nrow(getrfData()), size = nrow(getrfData())*0.8) #will put 80% of the rows in train
+  })
+  
+  rftestvalues <- reactive({
+    testvalues <- dplyr::setdiff(1:nrow(getrfData()), rftrainvalues()) #will put 20% of the rows in test
+  })
+  
+  rftrainset <- reactive({
+    trainset <- getrfData()[rftrainvalues(), ]   #creates a training set
+  })
+  
+  rftestset <- reactive({
+    testset <- getrfData()[rftestvalues(), ]     #creates a testing set
+  })
+  
+  forestformula <- reactive({
+    formula <- paste0(input$linchoice, " ~ ", input$linpredictor)
+  })
+  
+  
+  randomforesthours <- reactive({
+        rf_train <- train(input$linchoice ~ input$linpredictor, data = rftrainset(), method = "rf", 
+                          ntree = input$treenum,
+                          importance = TRUE, trControl = trainControl(method = "cv", number = 10, repeats = 3))      #train using random forest
+  })
+  
+  
+ output$rfresults <- renderPrint({
+    randomforesthours()
+ })
+  
   
   ######################DATA TABLE tab functions####
   
