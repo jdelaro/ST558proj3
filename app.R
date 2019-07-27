@@ -43,19 +43,22 @@ ui <- dashboardPage(skin = "yellow",
                                   br(),
                                   br(),
                                   "The Data Exploration tab will let you create a few tables and graphs with the data. Since the data set is ", em("a small 492,773 observations"),
-                                  "you'll have the ability to subset this dataset by State. Each state has several thousand participants apiece, so you'll be able to not only
-                                  look at descriptive information of each state with tables and graphs, but you can compare two states to each other on some set of relationships as well",
+                                  "you'll have the ability to subset this dataset by State. Each state has several thousand participants apiece, so you'll be able to 
+                                  look at descriptive information of any state with tables and graphs.",
                                   br(),
                                   br(),
                                   "The Clustering tab will let you visualize and set clusters for subsets of data. Good luck!",
                                   br(),
                                   br(),
-                                  "The Data modeling tab will let you, well, model the data with supervised learning! Here you'll be able to specify an outcome of interest, how many variables to use, and for seeing
-                                  how accurate the best three models were in generating a model. On the menu for what methods to use, simple linear regression (yes this is considered a machine learning method, I wasn't sure but since this project is open ended I had a cool programming idea and ran with it) and", em("k"), "nearest-neighbors are on the house today.",
+                                  "The Data modeling tab will let you, well, model the data with supervised learning! Here you'll be able 
+                                   to specify an outcome of interest, how many variables to use, and for seeing how accurate the best
+                                   three models were in generating a model. On the menu for what methods to use, simple linear regression
+                                   (yes this is considered a machine learning method, I wasn't sure but since this project is open ended
+                                   I had a cool programming idea and ran with it) and random forests are on the house today.",
                                   br(),
                                   br(),
                                   "The Data Table tab will give a nice table to look at, with the ability to subset the data by State, by gender, and by age group."
-                                )),
+                                  )),
                         
                         #Data Exploration Tab
                         tabItem(tabName = "eda",
@@ -98,18 +101,33 @@ ui <- dashboardPage(skin = "yellow",
                         tabItem(tabName = "modeling",
                                 h3("Select a State/Region to analyze"),
                                 selectizeInput("state3", "State", selected = "North Carolina", choices = levels(as.factor(brfss2013$State))),
-                                uiOutput('linearregressionchoiceout'),
                                 h4("Simple Linear Regression Modeling"),
+                                uiOutput('linearregressionchoiceout'),
                                 selectizeInput('linpredictor', 'Choose Predictor Variable', choices = names(brfss2013 %>% select(-State))),
                                 withMathJax(),
                                 uiOutput('regMathJax'),
+                                uiOutput('regoutputchoice'),
+                                verbatimTextOutput('regoutput'),
                                 br(),
                                 uiOutput('regpredictinput'),
                                 verbatimTextOutput('regpredictfit'),
                                 h4("Random Forest Modeling"),
-                                numericInput('treenum', 'Choose number of trees for Random Forest model', min = 1, max = length(names(brfss2013)), value = 3),
-                                verbatimTextOutput('rfresults')
-                              
+                                uiOutput('randomforestchoiceout'),
+                                numericInput('treenum', 'Choose number of trees for Random Forest model (10 to 500)', min = 10, max = 500, value = 10),
+                                uiOutput('rfoutputchoice'),
+                                verbatimTextOutput('rfoutput'),
+                                verbatimTextOutput('rftestresults'),
+                                uiOutput('bmipredictinput'),
+                                uiOutput('phypredictinput'),
+                                uiOutput('menpredictinput'),
+                                uiOutput('slppredictinput'),
+                                uiOutput('alcpredictinput'),
+                                uiOutput('frupredictinput'),
+                                uiOutput('benpredictinput'),
+                                uiOutput('grnpredictinput'),
+                                uiOutput('orgpredictinput'),
+                                tableOutput('rfpredictresults')
+                                
                         ),
                         
                         #Data Table Tab
@@ -123,7 +141,7 @@ ui <- dashboardPage(skin = "yellow",
                                 downloadButton("downloadFull", "Download All Data"),
                                 div(style = 'overflow-x: scroll', dataTableOutput("tabtable"))
                         )
-                      )
+                        )
                     )
 )
 
@@ -175,18 +193,19 @@ server <- function(input, output, session) {
   
   #creates graphs of one and two var relationships
   
-  edag <- reactive({
-    if (input$edavar2check){
-      g <- ggplot(getedaData1(), aes(x = input$edavar1, y = input$edavar2))
-    }
-    else{
-      g <- ggplot(getedaData1(), aes(x = input$edavar1))
-    }
-  })
+ # edag <- reactive({
+#    if (input$edavar2check){
+#      g <- ggplot(getedaData1(), aes(x = input$edavar1, y = input$edavar2))
+#    }
+#    else{
+#      g <- ggplot(getedaData1(), aes(x = input$edavar1))
+#    }
+#  })
   
   
   output$basicgraph <- renderPlot({
-      plot(getedaData1())
+    plot(getedaData1()[,input$edavar1], getedaData1()[,input$edavar2], main="Scatterplot",
+         xlab=input$edavar1, ylab=input$edavar2, pch=19)
   })
   
   
@@ -323,7 +342,7 @@ server <- function(input, output, session) {
   output$linearregressionchoiceout <- renderUI({
     brfssnumeric <- na.omit(brfss2013[,sapply(brfss2013,is.numeric)])
     colnames <- names(brfssnumeric)
-    selectInput('linchoice', 'Choose outcome variable', colnames)
+    selectInput('linchoice', 'Choose Outcome variable', colnames)
   })
   
   #create formula portion of lm function here
@@ -337,7 +356,8 @@ server <- function(input, output, session) {
     model <- lm(regressionformula(), data = getregData())
   })
   
-  #output a mathJax string of the equation at hand
+  #Regression Output
+  #Output a mathJax string of the equation at hand
   regressionequation <- reactive({
     for(a in 1:length(names(regressionmodel()$coefficients))){
       if (a == 1){
@@ -358,6 +378,17 @@ server <- function(input, output, session) {
       helpText(regressionequation())
     )
   })
+  
+  #Select attribute of regression model to output
+  output$regoutputchoice <- renderUI({
+    selectInput("regoutput", "Select the Regression Model Attribute you'd like to view:", choices = attributes(regressionmodel())$names)
+  })
+  
+  output$regoutput <- renderPrint({
+    regressionmodel()[[input$regoutput]]
+  })
+  
+  
   
   #for simple linear regression prediction
   
@@ -425,37 +456,204 @@ server <- function(input, output, session) {
     dataset <- na.omit(dataset[, colSums(is.na(dataset)) != nrow(dataset)])     #eliminate any columns that are all missings
   })
   
+  output$randomforestchoiceout <- renderUI({
+    colnames <- names(getrfData())
+    selectInput('rfchoice', 'Choose Outcome variable', colnames)
+  })
+  
+  #will put 80% of the rows in train
   rftrainvalues <- reactive({
-    trainvalues <- sample(1:nrow(getrfData()), size = nrow(getrfData())*0.8) #will put 80% of the rows in train
+    trainvalues <- sample(1:nrow(getrfData()), size = nrow(getrfData())*0.8) 
   })
   
+  #will put 20% of the rows in test
   rftestvalues <- reactive({
-    testvalues <- dplyr::setdiff(1:nrow(getrfData()), rftrainvalues()) #will put 20% of the rows in test
+    testvalues <- dplyr::setdiff(1:nrow(getrfData()), rftrainvalues()) 
   })
   
+  #creates a training set
   rftrainset <- reactive({
-    trainset <- getrfData()[rftrainvalues(), ]   #creates a training set
+    trainset <- getrfData()[rftrainvalues(), ]   
   })
   
+  #creates a testing set
   rftestset <- reactive({
-    testset <- getrfData()[rftestvalues(), ]     #creates a testing set
+    testset <- getrfData()[rftestvalues(), ] 
   })
   
+  #create formula for use in train function
   forestformula <- reactive({
-    formula <- paste0(input$linchoice, " ~ ", input$linpredictor)
+    formula <- paste0(input$rfchoice, " ~ .")
   })
   
-  
+  #train using random forest
   randomforesthours <- reactive({
-        rf_train <- train(input$linchoice ~ input$linpredictor, data = rftrainset(), method = "rf", 
-                          ntree = input$treenum,
-                          importance = TRUE, trControl = trainControl(method = "cv", number = 10, repeats = 3))      #train using random forest
+    rf_train <- train(as.formula(forestformula()), data = rftrainset(), method = "rf", 
+                      ntree = input$treenum,
+                      importance = TRUE, trControl = trainControl(method = "cv", number = 10))      
   })
   
+  #use test set to make predictions with random forest model
+  randomforesttestpredict <- reactive({
+    rftestpredict <- as.tibble(predict(randomforesthours(), newdata = rftestset()))
+  })
   
- output$rfresults <- renderPrint({
-    randomforesthours()
- })
+  #hold only values from test set from the inputted variable of interest
+  rfoutcomeindex <- reactive({
+    testsetoutcome <- rftestset()[, input$rfchoice]
+  })
+  
+  #output attributes of Random Forest model for viewing
+  
+  output$rfoutputchoice <- renderUI({
+    selectInput("rfoutput", "Select the Random Forest Model Attribute you'd like to view:", choices = attributes(randomforesthours())$names)
+  })
+  
+  output$rfoutput <- renderPrint({
+    randomforesthours()[[input$rfoutput]]
+  })
+  
+  #The formula sqrt(mean((randomforesttestpredict()-rfoutcomeindex())^2)) refused to work due to some strange coercion error, so I
+  #bit the bullet and made a for loop to handle this. This calculates Root MSE of test data and predicted test data
+  rfRMSE <- reactive({
+  for (a in 1:length(randomforesttestpredict())){
+       diff = randomforesttestpredict()[a] - rfoutcomeindex()[a]
+       if (a == 1){
+          sumofdiff <- diff^2
+       }
+       else{sumofdiff <- sumofdiff + diff}
+       if (a == length(randomforesttestpredict())){
+           meandiff <- mean(sumofdiff[,1])
+           return(sqrt(meandiff))
+       }
+  }
+    
+  })
+  
+  output$rftestresults <- renderPrint({
+    data.frame(RMSE_from_test_set = rfRMSE())
+  })
+  
+
+  
+  #predict using random forest
+  
+   rfimportance <- reactive({
+     sig <- rownames_to_column(varImp(randomforesthours())$importance)    #save importance of each variable with names in accessible column
+   })
+   
+   #creates inputs for each variable prediction the user specifies
+   #step 1: save value of overall importance for a given variable
+   #step 2: create text to be shown in textInput into separate object, rounding the importance value as well
+   #step 3: check if the outcome variable is the same as the output's variable of interest. If not, output textInput for prediction
+   #step 4: if it is, output text to prevent input for prediction (No sense in predicting BMI using BMI, for example)
+   
+   output$bmipredictinput <- renderUI({
+     bmi <- rfimportance() %>% filter(rowname == "BMI") %>% select(Overall)
+     bmitext <- paste("Input numeric prediction value for BMI. (Predictive importance:", round(bmi, 2), ")")
+     if (input$rfchoice != "BMI"){
+        textInput("bmipredict", bmitext, value = 0)
+     }
+     else{textInput("bmipredict", paste(bmitext, "(Outcome variable will not affect prediction)"), value = 999)}
+   })
+   
+   output$phypredictinput <- renderUI({
+     phyhealth <- rfimportance() %>% filter(rowname == "Physical_Health") %>% select(Overall)
+     phytext <- paste("Input numeric prediction value for Physical_Health. (Predictive importance:", round(phyhealth, 2), ")")
+     if (input$rfchoice != "Physical_Health"){
+        textInput("phypredict", phytext, value = 0)
+     }
+     else{textInput("phypredict", paste(phytext, "(Outcome variable will not affect prediction)"), value = 999)}
+   })
+   
+   output$menpredictinput <- renderUI({
+     menhealth <- rfimportance() %>% filter(rowname == "Mental_Health") %>% select(Overall)
+     mentext <- paste("Input numeric prediction value for Mental_Health. (Predictive importance:", round(menhealth, 2), ")")
+     if (input$rfchoice != "Mental_Health"){
+        textInput("menpredict", mentext, value = 0)
+     }
+     else{textInput("menpredict", paste(mentext, "(Outcome variable will not affect prediction)"), value = 999)}
+   })
+   
+   output$slppredictinput <- renderUI({
+     sleep_av <- rfimportance() %>% filter(rowname == "Sleep_Average") %>% select(Overall)
+     slptext <- paste("Input numeric prediction value for Sleep_Average. (Predictive importance:", round(sleep_av, 2), ")")
+     if (input$rfchoice != "Sleep_Average"){
+        textInput("slppredict", slptext, value = 0)
+     }
+     else{textInput("slppredict", paste(slptext, "(Outcome variable will not affect prediction)"), value = 999)}
+   })
+   
+   output$alcpredictinput <- renderUI({
+     alcohol <- rfimportance() %>% filter(rowname == "Monthly_Alcohol") %>% select(Overall)
+     alctext <- paste("Input numeric prediction value for Monthly_Alcohol. (Predictive importance:", round(alcohol, 2), ")")
+     if (input$rfchoice != "Monthly_Alcohol"){
+        textInput("alcpredict", alctext, value = 0)
+     }
+     else{textInput("alcpredict", paste(alctext, "(Outcome variable will not affect prediction)"), value = 999)}
+   })
+  
+   output$frupredictinput <- renderUI({
+     fruit <- rfimportance() %>% filter(rowname == "Daily_fruit_juice") %>% select(Overall)
+     fruittext <- paste("Input numeric prediction value for Daily_fruit_juice. (Predictive importance:", round(fruit, 2), ")")
+     if (input$rfchoice != "Daily_fruit_juice"){
+        textInput("fruitpredict", fruittext, value = 0)
+     }
+     else{textInput("fruitpredict", paste(fruittext, "(Outcome variable will not affect prediction)"), value = 999)}
+   })
+   
+   output$benpredictinput <- renderUI({
+     beans <- rfimportance() %>% filter(rowname == "Daily_Beans") %>% select(Overall)
+     beanstext <- paste("Input numeric prediction value for Daily_Beans. (Predictive importance:", round(beans, 2), ")")
+     if (input$rfchoice != "Daily_Beans"){
+        textInput("beanspredict", beanstext, value = 0)
+     }
+     else{textInput("beanspredict", paste(beanstext, "(Outcome variable will not affect prediction)"), value = 999)}
+   })
+   
+   output$grnpredictinput <- renderUI({
+     greens <- rfimportance() %>% filter(rowname == "Daily_Greens") %>% select(Overall)
+     greentext <- paste("Input numeric prediction value for Daily_Greens. (Predictive importance:", round(greens, 2), ")")
+     if (input$rfchoice != "Daily_Greens"){
+        textInput("greenpredict", greentext, value = 0)
+     }
+     else{textInput("greenpredict", paste(greentext, "(Outcome variable will not affect prediction)"), value = 999)}
+   })
+   
+   output$orgpredictinput <- renderUI({
+     oranges <- rfimportance() %>% filter(rowname == "Daily_orange") %>% select(Overall)
+     orangetext <- paste("Input numeric prediction value for Daily_orange. (Predictive importance:", round(oranges, 2), ")")
+     if (input$rfchoice != "Daily_orange"){
+        textInput("orangepredict", orangetext, value = 0)
+     }
+     else{textInput("orangepredict", paste(orangetext, "(Outcome variable will not affect prediction)"), value = 999)}
+   })
+  
+   #create dataset from inputs. Note that this can still take a character input and raise an error, however, checking ranges of numeric
+   #inputs was a little too involved for me, so I stuck to numeric inputs
+   rfpredictionframe <- reactive({
+     rfframe <- data.frame(BMI = as.numeric(input$bmipredict), Physical_Health = as.numeric(input$phypredict), 
+                           Mental_Health = as.numeric(input$menpredict),Sleep_Average = as.numeric(input$slppredict), 
+                           Monthly_Alcohol = as.numeric(input$alcpredict), Daily_fruit_juice = as.numeric(input$fruitpredict), 
+                           Daily_Beans = as.numeric(input$beanspredict), Daily_Greens = as.numeric(input$greenpredict), 
+                           Daily_orange = as.numeric(input$orangepredict)
+                           )
+   })
+   
+  rfpredictedvalue <- reactive({
+     prediction <- data.frame(Predicted_Value = predict(randomforesthours(), newdata = rfpredictionframe()))
+  })
+   
+   output$rfpredictresults <- renderTable({
+      rfpredictedvalue()
+   })
+   
+   
+  
+    
+   
+   
+  
   
   
   ######################DATA TABLE tab functions####
