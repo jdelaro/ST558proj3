@@ -5,6 +5,7 @@ library(shiny)
 library(shinydashboard)
 library(randomForest)
 library(caret)
+library(plotly)
 
 #read in brfss data once with fast read, then remove column number column
 brfss2013 <- tbl_df(fread("./brfss2013.csv", header = T, sep = ','))   #reads in big ole csv file
@@ -76,7 +77,8 @@ ui <- dashboardPage(skin = "yellow",
                                                  uiOutput('edavar2ui')),
                                 tableOutput("basicsummary"),
                                 br(),
-                                plotOutput("basicgraph")
+                                selectizeInput("edagraphtype", "Select graph type", choices = c("scatter", "bar")),
+                                plotlyOutput("basicgraph")
                         ),
                         
                         #Clustering Tab
@@ -157,9 +159,11 @@ server <- function(input, output, session) {
     newedaData <- brfss2013 %>% filter(State == input$state1)  #subsets data by State
   })
   
+  numericvalues <- names(brfss2013[,sapply(brfss2013,is.numeric)])
+  charactervalues <- names(brfss2013[,sapply(brfss2013,is.character)])
+  
   #data read in for Statewide participation table
   EDAFullCount <- reactive({brfss2013 %>% group_by(State) %>% summarize(count = n())})
-  
   output$EDABigTable <- renderDataTable({
     EDAFullCount()
   })
@@ -174,43 +178,65 @@ server <- function(input, output, session) {
     selectInput("edavar2", "Variable Two", selected = "Sex", choices = attributes(brfss2013)$names[c(2:61)])
   })
   
-  
-  
   #creates tables of one and two var contingencies
   
   output$basicsummary <- renderTable({
-    if (input$edavar2check){
-      with(getedaData1(), table(get(input$edavar1), get(input$edavar2)))
+    
+    #tables to make with two variables
+    if(input$edavar2check){
+      #table to make if first variable choice is numeric and second is character: summary tables for each category
+      if ((input$edavar1 %in% numericvalues) & (input$edavar2 %in% charactervalues)){
+        getedaData2 <- getedaData1()[,c(input$edavar1, input$edavar2)]
+        getedaData3 <- unlist(tapply(getedaData2[[1]], getedaData2[[2]], summary))
+        return(rownames_to_column(as.data.frame(getedaData3)))
+      }
+      
+      #table to make if first variable choice is character and second is numeric: summary tables for each category
+      else if ((input$edavar1 %in% charactervalues) & (input$edavar2 %in% numericvalues)){
+        getedaData2 <- getedaData1()[,c(input$edavar1, input$edavar2)]
+        getedaData3 <- unlist(tapply(getedaData2[[2]], getedaData2[[1]], summary))
+        return(rownames_to_column(as.data.frame(getedaData3)))
+      }
+      
+      
+      #table to make if both variables are numeric: summary tables of both variables separately
+      else if((input$edavar1 %in% numericvalues) & (input$edavar2 %in% numericvalues)){
+        p <- summary(getedaData1()[,input$edavar1])
+        return(cbind(p, summary(getedaData1()[,input$edavar2])))
+      }
+      
+      #table to make if both variables are character: contingency table with two variables
+      else{
+        return(with(getedaData1(), table(get(input$edavar1), get(input$edavar2))))
+      }
+      
     }
-    else{with(getedaData1(), table(get(input$edavar1)))}
+    else{
+      #table to make if single variable choice is numeric
+      if(input$edavar1 %in% numericvalues){
+        return(summary(getedaData1()[,input$edavar1]))
+      }
+      #table to make if single variable choice is character
+      else{return(with(getedaData1(), table(get(input$edavar1))))}
+    }
   })
   
-  #checks whether inputted variables are character/numeric
-  
-  edacheck <- reactive({
-    check <- getedaData1()
+  #creates cool graph with Plotly
+
+  graph <- reactive({
+    if (input$edavar2check){
+      p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), y = ~get(input$edavar2), type = input$edagraphtype,
+                     mode = 'markers', symbols = c('circle','x','o'),
+                     color = I('blue'), marker = list(size = 10))
+    }
+    else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), type = input$edagraphtype,
+                        mode = 'markers',
+                        color = I('red'), marker = list(size = 10))}
   })
   
-  #creates graphs of one and two var relationships
-  
- # edag <- reactive({
-#    if (input$edavar2check){
-#      g <- ggplot(getedaData1(), aes(x = input$edavar1, y = input$edavar2))
-#    }
-#    else{
-#      g <- ggplot(getedaData1(), aes(x = input$edavar1))
-#    }
-#  })
-  
-  
-  output$basicgraph <- renderPlot({
-    plot(getedaData1()[,input$edavar1], getedaData1()[,input$edavar2], main="Scatterplot",
-         xlab=input$edavar1, ylab=input$edavar2, pch=19)
+  output$basicgraph <- renderPlotly({
+    graph()
   })
-  
-  
-  
-  
   
   
   #######################CLUSTERING tab functions####
@@ -397,56 +423,29 @@ server <- function(input, output, session) {
   })
   
   output$regpredictinput <- renderUI({
-    brfssnumericreg <- na.omit(getregData()[,sapply(getregData(),is.numeric)])
-    numnames <- names(brfssnumericreg)
+
     
-    brfsscharacterreg <- na.omit(getregData()[,sapply(getregData(),is.character)])
-    colnames <- names(brfsscharacterreg)
-    
-    if (input$linpredictor %in% numnames){
-      numcheck <- TRUE
-    }
-    else{numcheck <- FALSE}    
-    
-    if (numcheck == TRUE){
-      textInput("numpredict", "Enter value for prediction", value = 3)
-    }
-    else if (numcheck == FALSE){
+    if (input$linpredictor %in% names(getregData()[,sapply(getregData(),is.character)])){
       selectInput("charpredict", "Enter prediction category", choices = regcheckdata())
     }
-    
+    else {
+      numericInput("numpredict", "Enter value for prediction", value = 3, min = 0, max = 25)
+    }
   })
   
   output$regpredictfit <- renderPrint({
-    brfssnumericreg <- na.omit(getregData()[,sapply(getregData(),is.numeric)])
-    numnames <- names(brfssnumericreg)
     
-    brfsscharacterreg <- na.omit(getregData()[,sapply(getregData(),is.character)])
-    colnames <- names(brfsscharacterreg)
-    
-    if (input$linpredictor %in% numnames){
-      numcheck <- TRUE
-    }
-    else{numcheck <- FALSE}
-    
-    #create prediction data frame for numeric data
-    if(numcheck == TRUE){
-      numframe <- data.frame(var = input$numpredict)
-      colnames(numframe) <- input$linpredictor
-    }
-    
-    #create prediction data frame for character data
-    else{
+    if(input$linpredictor %in% names(getregData()[,sapply(getregData(),is.character)])){
       charframe <- data.frame(var =  input$charpredict)
-      colnames(charframe) <- input$linpredictor
+      colnames(charframe) <- input$linpredictor      
+      predict(regressionmodel(), newdata = charframe, se.fit = TRUE)
     }
     
-    if(numcheck == TRUE){
+    else {
+      numframe <- data.frame(var = input$numpredict)
+      colnames(numframe) <- input$linpredictor      
       predict(regressionmodel(), newdata = numframe, se.fit = TRUE)
-    }
-    
-    else{predict(regressionmodel(), newdata = charframe, se.fit = TRUE)}
-    
+    }    
   })
   
   ##### PART 2: Random Forest algorithm time!
