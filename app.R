@@ -60,7 +60,7 @@ ui <- dashboardPage(skin = "yellow",
                                   "The Data Table tab will give a nice table to look at, with the ability to subset the data by State, by gender, and by age group.",
                                   br(),
                                   br(),
-                                  "I should also mention that due to git's lovely limitations, I have filtered the data set to only include data from North Carolina, California, Florida, and Guam."
+                                  "I should also mention that due to git's lovely limitations, I have filtered the data set to only include data from North Carolina, South Carolina, Oregon, New York, California, Pennsylvania, Alaska, and Guam. If these choices seem a little random it's because they mostly are!"
                                 )),
                         
                         #Data Exploration Tab
