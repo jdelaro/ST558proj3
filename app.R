@@ -8,7 +8,7 @@ library(caret)
 library(plotly)
 
 #read in brfss data once with fast read, then remove column number column
-brfss2013 <- tbl_df(fread("./brfss2013.csv", header = T, sep = ','))   #reads in big ole csv file
+brfss2013 <- tbl_df(fread("brfss2013.csv", header = T, sep = ','))   #reads in big ole csv file
 
 set.seed(31594) #set seed for machine learning shenanigans
 
@@ -52,14 +52,13 @@ ui <- dashboardPage(skin = "yellow",
                                   br(),
                                   br(),
                                   "The Data modeling tab will let you, well, model the data with supervised learning! Here you'll be able 
-                                   to specify an outcome of interest, how many variables to use, and for seeing how accurate the best
-                                   three models were in generating a model. On the menu for what methods to use, simple linear regression
+                                   to specify an outcome of interest, how many variables to use, and for seeing how accurate models generated were based on RMSE. On the menu for what methods to use, simple linear regression
                                    (yes this is considered a machine learning method, I wasn't sure but since this project is open ended
-                                   I had a cool programming idea and ran with it) and random forests are on the house today.",
+                                   I had a cool programming idea for mathJax and ran with it) and random forests are on the house today.",
                                   br(),
                                   br(),
                                   "The Data Table tab will give a nice table to look at, with the ability to subset the data by State, by gender, and by age group."
-                                  )),
+                                )),
                         
                         #Data Exploration Tab
                         tabItem(tabName = "eda",
@@ -75,9 +74,11 @@ ui <- dashboardPage(skin = "yellow",
                                 conditionalPanel(condition = "input.edavar2check",
                                                  h3("Select another variable to examine"),
                                                  uiOutput('edavar2ui')),
+                                downloadButton('summarysave', "Save Table Data"),
                                 tableOutput("basicsummary"),
                                 br(),
-                                selectizeInput("edagraphtype", "Select graph type", choices = c("scatter", "bar")),
+                                selectizeInput("edagraphtype", "Select graph type", choices = c("scatter", "histogram")),
+                                downloadButton('graphsave', "Save Graph"),
                                 plotlyOutput("basicgraph")
                         ),
                         
@@ -143,7 +144,7 @@ ui <- dashboardPage(skin = "yellow",
                                 downloadButton("downloadFull", "Download All Data"),
                                 div(style = 'overflow-x: scroll', dataTableOutput("tabtable"))
                         )
-                        )
+                      )
                     )
 )
 
@@ -221,17 +222,62 @@ server <- function(input, output, session) {
     }
   })
   
+  #kinda messy syntax, but basically saves the same data used in the table to a csv after button push
+  output$summarysave <- downloadHandler(
+    filename = function() {
+      paste("summarydata.csv", sep = "")
+    },
+    content = function(file){
+      if(input$edavar2check){
+        if ((input$edavar1 %in% numericvalues) & (input$edavar2 %in% charactervalues)){
+          getedaData2 <- getedaData1()[,c(input$edavar1, input$edavar2)]
+          getedaData3 <- unlist(tapply(getedaData2[[1]], getedaData2[[2]], summary))
+        write.csv(rownames_to_column(as.data.frame(getedaData3)), file, row.names = FALSE)
+      }
+        else if ((input$edavar1 %in% charactervalues) & (input$edavar2 %in% numericvalues)){
+          getedaData2 <- getedaData1()[,c(input$edavar1, input$edavar2)]
+          getedaData3 <- unlist(tapply(getedaData2[[2]], getedaData2[[1]], summary))
+        write.csv(rownames_to_column(as.data.frame(getedaData3)), file, row.names = FALSE)
+      }
+        else if((input$edavar1 %in% numericvalues) & (input$edavar2 %in% numericvalues)){
+          p <- summary(getedaData1()[,input$edavar1])
+          write.csv((cbind(p, summary(getedaData1()[,input$edavar2]))), file, row.names = FALSE)
+        }
+        else {write.csv(with(getedaData1(), table(get(input$edavar1), get(input$edavar2))), file, row.names = FALSE)}
+      }
+      else{
+        if(input$edavar1 %in% numericvalues){
+          write.csv(summary(getedaData1()[,input$edavar1]), file, row.names = FALSE)
+        }
+        else{write.csv(getedaData1()[,input$edavar1], file, row.names = FALSE)}
+      }
+    }
+  )
+  
+  output$graphsave <- downloadHandler(
+    filename = function() {
+      paste("edagraph.png", sep = "")
+    },
+    content = function(file){
+      if (input$edavar2check){
+       p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), y = ~get(input$edavar2), type = input$edagraphtype) 
+      }
+      else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), type = input$edagraphtype)}
+      
+      orca(p, file = "./edagraph.png")
+      
+    }
+    
+    
+  )
+  
   #creates cool graph with Plotly
-
+  
   graph <- reactive({
     if (input$edavar2check){
-      p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), y = ~get(input$edavar2), type = input$edagraphtype,
-                     mode = 'markers', symbols = c('circle','x','o'),
-                     color = I('blue'), marker = list(size = 10))
+      p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), y = ~get(input$edavar2), type = input$edagraphtype)
     }
-    else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), type = input$edagraphtype,
-                        mode = 'markers',
-                        color = I('red'), marker = list(size = 10))}
+    else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), type = input$edagraphtype)}
   })
   
   output$basicgraph <- renderPlotly({
@@ -304,48 +350,43 @@ server <- function(input, output, session) {
   #save clustered diagram
   output$downloadPlotC <- downloadHandler(
     filename = function() {
-      paste(input$clusterplot, ".png", sep = "")
+      paste("clusterplot.png", sep = "")
     },
     content = function(file){
-      device <- function(..., width, height) {
-        grDevices::png(..., width = width, height = height,
-                       res = 300, units = "in")
-      }
-      ggsave(file, plot = output$clusterplot(), device = device)
+      ggsave(file, plot = plot(subsetData3(),
+                               col = clusters()$cluster,
+                               pch = 20, cex = 3)
+      )
     }
   )
   
   #save clustered diagram data
   output$downloadDataC <- downloadHandler(
     filename = function() {
-      paste(input$clusterdata, ".csv", sep = "")
+      paste("clusterdata.csv", sep = "")
     },
     content = function(file){
-      write.csv(clusters(), file, row.names = FALSE)
+      write.csv(unlist(clusters()), file, row.names = TRUE)
     }
   )
   
   #save dendogram
   output$downloadDendoC <- downloadHandler(
     filename = function() {
-      paste(input$dendogram, ".png", sep = "")
+      paste("dendogram.png", sep = "")
     },
     content = function(file){
-      device <- function(..., width, height) {
-        grDevices::png(..., width = width, height = height,
-                       res = 300, units = "in")
-      }
-      ggsave(file, plot = output$dendo(), device = device)
+      ggsave(file, plot = plot(hierClust(), main="dendrogram"))
     }
   )
   
   #save dendogram data
   output$downloadDendoDataC <- downloadHandler(
     filename = function() {
-      paste(input$dendodata, ".csv", sep = "")
+      paste("dendodata.csv", sep = "")
     },
     content = function(file){
-      write.csv(hierClust(), file, row.names = FALSE)
+      write.csv(unlist(hierClust()$merge), file, row.names = TRUE)
     }
   )
   
@@ -423,7 +464,7 @@ server <- function(input, output, session) {
   })
   
   output$regpredictinput <- renderUI({
-
+    
     
     if (input$linpredictor %in% names(getregData()[,sapply(getregData(),is.character)])){
       selectInput("charpredict", "Enter prediction category", choices = regcheckdata())
@@ -515,17 +556,17 @@ server <- function(input, output, session) {
   #The formula sqrt(mean((randomforesttestpredict()-rfoutcomeindex())^2)) refused to work due to some strange coercion error, so I
   #bit the bullet and made a for loop to handle this. This calculates Root MSE of test data and predicted test data
   rfRMSE <- reactive({
-  for (a in 1:length(randomforesttestpredict())){
-       diff = randomforesttestpredict()[a] - rfoutcomeindex()[a]
-       if (a == 1){
-          sumofdiff <- diff^2
-       }
-       else{sumofdiff <- sumofdiff + diff}
-       if (a == length(randomforesttestpredict())){
-           meandiff <- mean(sumofdiff[,1])
-           return(sqrt(meandiff))
-       }
-  }
+    for (a in 1:length(randomforesttestpredict())){
+      diff = randomforesttestpredict()[a] - rfoutcomeindex()[a]
+      if (a == 1){
+        sumofdiff <- diff^2
+      }
+      else{sumofdiff <- sumofdiff + diff}
+      if (a == length(randomforesttestpredict())){
+        meandiff <- mean(sumofdiff[,1])
+        return(sqrt(meandiff))
+      }
+    }
     
   })
   
@@ -533,120 +574,121 @@ server <- function(input, output, session) {
     data.frame(RMSE_from_test_set = rfRMSE())
   })
   
-
+  
   
   #predict using random forest
   
-   rfimportance <- reactive({
-     sig <- rownames_to_column(varImp(randomforesthours())$importance)    #save importance of each variable with names in accessible column
-   })
-   
-   #creates inputs for each variable prediction the user specifies
-   #step 1: save value of overall importance for a given variable
-   #step 2: create text to be shown in textInput into separate object, rounding the importance value as well
-   #step 3: check if the outcome variable is the same as the output's variable of interest. If not, output textInput for prediction
-   #step 4: if it is, output text to prevent input for prediction (No sense in predicting BMI using BMI, for example)
-   
-   output$bmipredictinput <- renderUI({
-     bmi <- rfimportance() %>% filter(rowname == "BMI") %>% select(Overall)
-     bmitext <- paste("Input numeric prediction value for BMI. (Predictive importance:", round(bmi, 2), ")")
-     if (input$rfchoice != "BMI"){
-        textInput("bmipredict", bmitext, value = 0)
-     }
-     else{textInput("bmipredict", paste(bmitext, "(Outcome variable will not affect prediction)"), value = 999)}
-   })
-   
-   output$phypredictinput <- renderUI({
-     phyhealth <- rfimportance() %>% filter(rowname == "Physical_Health") %>% select(Overall)
-     phytext <- paste("Input numeric prediction value for Physical_Health. (Predictive importance:", round(phyhealth, 2), ")")
-     if (input$rfchoice != "Physical_Health"){
-        textInput("phypredict", phytext, value = 0)
-     }
-     else{textInput("phypredict", paste(phytext, "(Outcome variable will not affect prediction)"), value = 999)}
-   })
-   
-   output$menpredictinput <- renderUI({
-     menhealth <- rfimportance() %>% filter(rowname == "Mental_Health") %>% select(Overall)
-     mentext <- paste("Input numeric prediction value for Mental_Health. (Predictive importance:", round(menhealth, 2), ")")
-     if (input$rfchoice != "Mental_Health"){
-        textInput("menpredict", mentext, value = 0)
-     }
-     else{textInput("menpredict", paste(mentext, "(Outcome variable will not affect prediction)"), value = 999)}
-   })
-   
-   output$slppredictinput <- renderUI({
-     sleep_av <- rfimportance() %>% filter(rowname == "Sleep_Average") %>% select(Overall)
-     slptext <- paste("Input numeric prediction value for Sleep_Average. (Predictive importance:", round(sleep_av, 2), ")")
-     if (input$rfchoice != "Sleep_Average"){
-        textInput("slppredict", slptext, value = 0)
-     }
-     else{textInput("slppredict", paste(slptext, "(Outcome variable will not affect prediction)"), value = 999)}
-   })
-   
-   output$alcpredictinput <- renderUI({
-     alcohol <- rfimportance() %>% filter(rowname == "Monthly_Alcohol") %>% select(Overall)
-     alctext <- paste("Input numeric prediction value for Monthly_Alcohol. (Predictive importance:", round(alcohol, 2), ")")
-     if (input$rfchoice != "Monthly_Alcohol"){
-        textInput("alcpredict", alctext, value = 0)
-     }
-     else{textInput("alcpredict", paste(alctext, "(Outcome variable will not affect prediction)"), value = 999)}
-   })
-  
-   output$frupredictinput <- renderUI({
-     fruit <- rfimportance() %>% filter(rowname == "Daily_fruit_juice") %>% select(Overall)
-     fruittext <- paste("Input numeric prediction value for Daily_fruit_juice. (Predictive importance:", round(fruit, 2), ")")
-     if (input$rfchoice != "Daily_fruit_juice"){
-        textInput("fruitpredict", fruittext, value = 0)
-     }
-     else{textInput("fruitpredict", paste(fruittext, "(Outcome variable will not affect prediction)"), value = 999)}
-   })
-   
-   output$benpredictinput <- renderUI({
-     beans <- rfimportance() %>% filter(rowname == "Daily_Beans") %>% select(Overall)
-     beanstext <- paste("Input numeric prediction value for Daily_Beans. (Predictive importance:", round(beans, 2), ")")
-     if (input$rfchoice != "Daily_Beans"){
-        textInput("beanspredict", beanstext, value = 0)
-     }
-     else{textInput("beanspredict", paste(beanstext, "(Outcome variable will not affect prediction)"), value = 999)}
-   })
-   
-   output$grnpredictinput <- renderUI({
-     greens <- rfimportance() %>% filter(rowname == "Daily_Greens") %>% select(Overall)
-     greentext <- paste("Input numeric prediction value for Daily_Greens. (Predictive importance:", round(greens, 2), ")")
-     if (input$rfchoice != "Daily_Greens"){
-        textInput("greenpredict", greentext, value = 0)
-     }
-     else{textInput("greenpredict", paste(greentext, "(Outcome variable will not affect prediction)"), value = 999)}
-   })
-   
-   output$orgpredictinput <- renderUI({
-     oranges <- rfimportance() %>% filter(rowname == "Daily_orange") %>% select(Overall)
-     orangetext <- paste("Input numeric prediction value for Daily_orange. (Predictive importance:", round(oranges, 2), ")")
-     if (input$rfchoice != "Daily_orange"){
-        textInput("orangepredict", orangetext, value = 0)
-     }
-     else{textInput("orangepredict", paste(orangetext, "(Outcome variable will not affect prediction)"), value = 999)}
-   })
-  
-   #create dataset from inputs. Note that this can still take a character input and raise an error, however, checking ranges of numeric
-   #inputs was a little too involved for me, so I stuck to numeric inputs
-   rfpredictionframe <- reactive({
-     rfframe <- data.frame(BMI = as.numeric(input$bmipredict), Physical_Health = as.numeric(input$phypredict), 
-                           Mental_Health = as.numeric(input$menpredict),Sleep_Average = as.numeric(input$slppredict), 
-                           Monthly_Alcohol = as.numeric(input$alcpredict), Daily_fruit_juice = as.numeric(input$fruitpredict), 
-                           Daily_Beans = as.numeric(input$beanspredict), Daily_Greens = as.numeric(input$greenpredict), 
-                           Daily_orange = as.numeric(input$orangepredict)
-                           )
-   })
-   
-  rfpredictedvalue <- reactive({
-     prediction <- data.frame(Predicted_Value = predict(randomforesthours(), newdata = rfpredictionframe()))
+  rfimportance <- reactive({
+    sig <- rownames_to_column(varImp(randomforesthours())$importance)    #save importance of each variable with names in accessible column
   })
-   
-   output$rfpredictresults <- renderTable({
-      rfpredictedvalue()
-   })
-
+  
+  #creates inputs for each variable prediction the user specifies
+  #step 1: save value of overall importance for a given variable
+  #step 2: create text to be shown in textInput into separate object, rounding the importance value as well
+  #step 3: check if the outcome variable is the same as the output's variable of interest. If not, output textInput for prediction
+  #step 4: if it is, output text to prevent input for prediction (No sense in predicting BMI using BMI, for example)
+  
+  output$bmipredictinput <- renderUI({
+    bmi <- rfimportance() %>% filter(rowname == "BMI") %>% select(Overall)
+    bmitext <- paste("Input numeric prediction value for BMI. (Predictive importance:", round(bmi, 2), ")")
+    if (input$rfchoice != "BMI"){
+      textInput("bmipredict", bmitext, value = 0)
+    }
+    else{textInput("bmipredict", paste(bmitext, "(Outcome variable will not affect prediction)"), value = 999)}
+  })
+  
+  output$phypredictinput <- renderUI({
+    phyhealth <- rfimportance() %>% filter(rowname == "Physical_Health") %>% select(Overall)
+    phytext <- paste("Input numeric prediction value for Physical_Health. (Predictive importance:", round(phyhealth, 2), ")")
+    if (input$rfchoice != "Physical_Health"){
+      textInput("phypredict", phytext, value = 0)
+    }
+    else{textInput("phypredict", paste(phytext, "(Outcome variable will not affect prediction)"), value = 999)}
+  })
+  
+  output$menpredictinput <- renderUI({
+    menhealth <- rfimportance() %>% filter(rowname == "Mental_Health") %>% select(Overall)
+    mentext <- paste("Input numeric prediction value for Mental_Health. (Predictive importance:", round(menhealth, 2), ")")
+    if (input$rfchoice != "Mental_Health"){
+      textInput("menpredict", mentext, value = 0)
+    }
+    else{textInput("menpredict", paste(mentext, "(Outcome variable will not affect prediction)"), value = 999)}
+  })
+  
+  output$slppredictinput <- renderUI({
+    sleep_av <- rfimportance() %>% filter(rowname == "Sleep_Average") %>% select(Overall)
+    slptext <- paste("Input numeric prediction value for Sleep_Average. (Predictive importance:", round(sleep_av, 2), ")")
+    if (input$rfchoice != "Sleep_Average"){
+      textInput("slppredict", slptext, value = 0)
+    }
+    else{textInput("slppredict", paste(slptext, "(Outcome variable will not affect prediction)"), value = 999)}
+  })
+  
+  output$alcpredictinput <- renderUI({
+    alcohol <- rfimportance() %>% filter(rowname == "Monthly_Alcohol") %>% select(Overall)
+    alctext <- paste("Input numeric prediction value for Monthly_Alcohol. (Predictive importance:", round(alcohol, 2), ")")
+    if (input$rfchoice != "Monthly_Alcohol"){
+      textInput("alcpredict", alctext, value = 0)
+    }
+    else{textInput("alcpredict", paste(alctext, "(Outcome variable will not affect prediction)"), value = 999)}
+  })
+  
+  output$frupredictinput <- renderUI({
+    fruit <- rfimportance() %>% filter(rowname == "Daily_fruit_juice") %>% select(Overall)
+    fruittext <- paste("Input numeric prediction value for Daily_fruit_juice. (Predictive importance:", round(fruit, 2), ")")
+    if (input$rfchoice != "Daily_fruit_juice"){
+      textInput("fruitpredict", fruittext, value = 0)
+    }
+    else{textInput("fruitpredict", paste(fruittext, "(Outcome variable will not affect prediction)"), value = 999)}
+  })
+  
+  output$benpredictinput <- renderUI({
+    beans <- rfimportance() %>% filter(rowname == "Daily_Beans") %>% select(Overall)
+    beanstext <- paste("Input numeric prediction value for Daily_Beans. (Predictive importance:", round(beans, 2), ")")
+    if (input$rfchoice != "Daily_Beans"){
+      textInput("beanspredict", beanstext, value = 0)
+    }
+    else{textInput("beanspredict", paste(beanstext, "(Outcome variable will not affect prediction)"), value = 999)}
+  })
+  
+  output$grnpredictinput <- renderUI({
+    greens <- rfimportance() %>% filter(rowname == "Daily_Greens") %>% select(Overall)
+    greentext <- paste("Input numeric prediction value for Daily_Greens. (Predictive importance:", round(greens, 2), ")")
+    if (input$rfchoice != "Daily_Greens"){
+      textInput("greenpredict", greentext, value = 0)
+    }
+    else{textInput("greenpredict", paste(greentext, "(Outcome variable will not affect prediction)"), value = 999)}
+  })
+  
+  output$orgpredictinput <- renderUI({
+    oranges <- rfimportance() %>% filter(rowname == "Daily_orange") %>% select(Overall)
+    orangetext <- paste("Input numeric prediction value for Daily_orange. (Predictive importance:", round(oranges, 2), ")")
+    if (input$rfchoice != "Daily_orange"){
+      textInput("orangepredict", orangetext, value = 0)
+    }
+    else{textInput("orangepredict", paste(orangetext, "(Outcome variable will not affect prediction)"), value = 999)}
+  })
+  
+  #create dataset from inputs. Note that this can still take a character input and raise an error, however, checking ranges of numeric
+  #inputs was a little too involved for me, so I stuck to numeric inputs
+  rfpredictionframe <- reactive({
+    rfframe <- data.frame(BMI = as.numeric(input$bmipredict), Physical_Health = as.numeric(input$phypredict), 
+                          Mental_Health = as.numeric(input$menpredict),Sleep_Average = as.numeric(input$slppredict), 
+                          Monthly_Alcohol = as.numeric(input$alcpredict), Daily_fruit_juice = as.numeric(input$fruitpredict), 
+                          Daily_Beans = as.numeric(input$beanspredict), Daily_Greens = as.numeric(input$greenpredict), 
+                          Daily_orange = as.numeric(input$orangepredict)
+    )
+  })
+  
+  #creates table of predicted value from inputted prediction value
+  rfpredictedvalue <- reactive({
+    prediction <- data.frame(Predicted_Value = predict(randomforesthours(), newdata = rfpredictionframe()))
+  })
+  
+  output$rfpredictresults <- renderTable({
+    rfpredictedvalue()
+  })
+  
   
   ######################DATA TABLE tab functions####
   
@@ -679,7 +721,7 @@ server <- function(input, output, session) {
   
   output$downloadDatatab <- downloadHandler(
     filename = function() {
-      paste(input$tabledata, ".csv", sep = "")
+      paste("brfss2013filtereddata.csv", sep = "")
     },
     #save data filtered by sex if it was filtered by 
     content = function(file){
@@ -693,7 +735,7 @@ server <- function(input, output, session) {
   #save the full dataset from the table tab
   output$downloadFull <- downloadHandler(
     filename = function() {
-      paste(input$tabledata, ".csv", sep = "")
+      paste("brfss2013ALLDATA.csv", sep = "")
     },
     #save data filtered by sex if it was filtered by 
     content = function(file){
