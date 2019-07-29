@@ -57,7 +57,9 @@ ui <- dashboardPage(skin = "yellow",
                                    I had a cool programming idea for mathJax and ran with it) and random forests are on the house today.",
                                   br(),
                                   br(),
-                                  "The Data Table tab will give a nice table to look at, with the ability to subset the data by State, by gender, and by age group."
+                                  "The Data Table tab will give a nice table to look at, with the ability to subset the data by State, by gender, and by age group.",
+                                  br(),
+                                  "I should also mention that due to git's lovely limitations, I have filtered the data set to only include data from North Carolina, California, Florida, and Guam."
                                 )),
                         
                         #Data Exploration Tab
