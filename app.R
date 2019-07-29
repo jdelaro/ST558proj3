@@ -261,19 +261,40 @@ server <- function(input, output, session) {
   #creates cool graph with Plotly
   
   graph <- reactive({
+    
+    #saves inputs as labels for graphs
+    x <- list(
+      title = input$edavar1
+    )
+    
+    y <- list(
+      title = input$edavar2
+    )
+    
+    #for when there are two variables
     if (input$edavar2check){
+      
+      #for when the first var is numeric and the second is character
       if ((input$edavar1 %in% numericvalues) & (input$edavar2 %in% charactervalues)){
-          p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), color = ~get(input$edavar2), type = input$edagraphtype)
+          p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), color = ~get(input$edavar2), type = input$edagraphtype) %>% layout(xaxis = x)
       }
+      
+      #for when the first var is character and the second is numeric
       else if ((input$edavar1 %in% charactervalues) & (input$edavar2 %in% numericvalues)){
-        p <- plot_ly(data = getedaData1(), x = ~get(input$edavar2), color = ~get(input$edavar1), type = input$edagraphtype)
+        p <- plot_ly(data = getedaData1(), x = ~get(input$edavar2), color = ~get(input$edavar1), type = input$edagraphtype) %>% layout(xaxis = y)
       }
+      
+      #for when both vars are numeric
       else if ((input$edavar1 %in% numericvalues) & (input$edavar2 %in% numericvalues)){
-        p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), y = ~get(input$edavar2), type = input$edagraphtype)
+        p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), y = ~get(input$edavar2), type = input$edagraphtype) %>% layout(xaxis = x, yaxis = y)
       }
-      else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar2), color = ~get(input$edavar1), type = input$edagraphtype)}
+      
+      #for when both vars are character
+      else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar2), color = ~get(input$edavar1), type = input$edagraphtype) %>% layout(xaxis = x)}
     }
-    else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), type = input$edagraphtype)}
+    
+    #for when there's only one variable
+    else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), type = input$edagraphtype) %>% layout(xaxis = x)}
   })
   
   output$basicgraph <- renderPlotly({
