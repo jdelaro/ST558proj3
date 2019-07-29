@@ -59,6 +59,7 @@ ui <- dashboardPage(skin = "yellow",
                                   br(),
                                   "The Data Table tab will give a nice table to look at, with the ability to subset the data by State, by gender, and by age group.",
                                   br(),
+                                  br(),
                                   "I should also mention that due to git's lovely limitations, I have filtered the data set to only include data from North Carolina, California, Florida, and Guam."
                                 )),
                         
@@ -79,7 +80,7 @@ ui <- dashboardPage(skin = "yellow",
                                 downloadButton('summarysave', "Save Table Data"),
                                 tableOutput("basicsummary"),
                                 br(),
-                                selectizeInput("edagraphtype", "Select graph type", choices = c("scatter", "histogram")),
+                                selectizeInput("edagraphtype", "Select graph type", choices = c("scatter", "histogram"), selected = "histogram"),
                                 downloadButton('graphsave', "Save Graph"),
                                 plotlyOutput("basicgraph")
                         ),
@@ -277,7 +278,16 @@ server <- function(input, output, session) {
   
   graph <- reactive({
     if (input$edavar2check){
-      p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), y = ~get(input$edavar2), type = input$edagraphtype)
+      if ((input$edavar1 %in% numericvalues) & (input$edavar2 %in% charactervalues)){
+          p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), color = ~get(input$edavar2), type = input$edagraphtype)
+      }
+      else if ((input$edavar1 %in% charactervalues) & (input$edavar2 %in% numericvalues)){
+        p <- plot_ly(data = getedaData1(), x = ~get(input$edavar2), color = ~get(input$edavar1), type = input$edagraphtype)
+      }
+      else if ((input$edavar1 %in% numericvalues) & (input$edavar2 %in% numericvalues)){
+        p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), y = ~get(input$edavar2), type = input$edagraphtype)
+      }
+      else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar2), color = ~get(input$edavar1), type = input$edagraphtype)}
     }
     else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), type = input$edagraphtype)}
   })
