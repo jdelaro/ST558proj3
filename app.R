@@ -81,7 +81,7 @@ ui <- dashboardPage(skin = "yellow",
                                 tableOutput("basicsummary"),
                                 br(),
                                 selectizeInput("edagraphtype", "Select graph type", choices = c("scatter", "histogram"), selected = "histogram"),
-                                downloadButton('graphsave', "Save Graph"),
+                                h3("Click the camera icon to save the graph"),
                                 plotlyOutput("basicgraph")
                         ),
                         
@@ -256,23 +256,7 @@ server <- function(input, output, session) {
       }
     }
   )
-  
-  output$graphsave <- downloadHandler(
-    filename = function() {
-      paste("edagraph.png", sep = "")
-    },
-    content = function(file){
-      if (input$edavar2check){
-       p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), y = ~get(input$edavar2), type = input$edagraphtype) 
-      }
-      else{p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), type = input$edagraphtype)}
-      
-      orca(p, file = "./edagraph.png")
-      
-    }
     
-    
-  )
   
   #creates cool graph with Plotly
   
