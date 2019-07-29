@@ -646,14 +646,7 @@ server <- function(input, output, session) {
    output$rfpredictresults <- renderTable({
       rfpredictedvalue()
    })
-   
-   
-  
-    
-   
-   
-  
-  
+
   
   ######################DATA TABLE tab functions####
   
