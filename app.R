@@ -1,4 +1,3 @@
-library(tidyverse)
 library(data.table)
 library(DT)
 library(shiny)
@@ -9,6 +8,8 @@ library(plotly)
 
 #read in brfss data once with fast read, then remove column number column
 brfss2013 <- tbl_df(fread("brfss2013.csv", header = T, sep = ','))   #reads in big ole csv file
+numericvalues <- names(brfss2013[,sapply(brfss2013,is.numeric)])    #save numeric variable names here
+charactervalues <- names(brfss2013[,sapply(brfss2013,is.character)])  #save character variable names here
 
 set.seed(31594) #set seed for machine learning shenanigans
 
@@ -28,7 +29,7 @@ ui <- dashboardPage(skin = "yellow",
                         # Introduction Tab
                         tabItem(tabName = "introduction",
                                 fluidRow(
-                                  h3("Intro to the BRFSS App"),
+                                  h2("Intro to the BRFSS App"),
                                   "The Behavioral Risk Factor Surveillance System is a major project undertaken by the CDC every year to understand the relationships
                                   between factors such as dieting, drug use, and social perceptions and health outcomes such as heart risk and obesity. More information
                                   can be found on the BRFSS website by clicking", a("here.", href="https://www.cdc.gov/brfss/about/index.htm"),
@@ -45,16 +46,17 @@ ui <- dashboardPage(skin = "yellow",
                                   br(),
                                   "The Data Exploration tab will let you create a few tables and graphs with the data. Since the data set is ", em("a small 492,773 observations"),
                                   "you'll have the ability to subset this dataset by State. Each state has several thousand participants apiece, so you'll be able to 
-                                  look at descriptive information of any state with tables and graphs.",
+                                  look at descriptive information of any state with tables and graphs. You will of course be able to save the graphs generated and save the data that goes with it.",
                                   br(),
                                   br(),
-                                  "The Clustering tab will let you visualize and set clusters for subsets of data. Good luck!",
+                                  "The Clustering tab will let you visualize and set clusters for subsets of data, and you'll be able to save the data and graphs as well.",
                                   br(),
                                   br(),
-                                  "The Data modeling tab will let you, well, model the data with supervised learning! Here you'll be able 
-                                   to specify an outcome of interest, how many variables to use, and for seeing how accurate models generated were based on RMSE. On the menu for what methods to use, simple linear regression
-                                   (yes this is considered a machine learning method, I wasn't sure but since this project is open ended
-                                   I had a cool programming idea for mathJax and ran with it) and random forests are on the house today.",
+                                  "The Data modeling tab will let you, well, model the data! Here you'll be able 
+                                  to specify an outcome of interest, how many variables to use, and for seeing how accurate models generated were based on RMSE. On the menu for what methods to use, simple linear regression
+                                  (yes this is considered a machine learning method, I wasn't sure but since this project is open ended
+                                  I had a cool programming idea for mathJax and ran with it) and random forests are on the house today. As a heads up, not all States have enough observations
+                                  to use for some models. You may get an error if this is the case. Don't be alarmed! Just pick a different variable, okay?",
                                   br(),
                                   br(),
                                   "The Data Table tab will give a nice table to look at, with the ability to subset the data by State, by gender, and by age group.",
@@ -147,7 +149,7 @@ ui <- dashboardPage(skin = "yellow",
                                 downloadButton("downloadFull", "Download All Data"),
                                 div(style = 'overflow-x: scroll', dataTableOutput("tabtable"))
                         )
-                      )
+                        )
                     )
 )
 
@@ -163,8 +165,7 @@ server <- function(input, output, session) {
     newedaData <- brfss2013 %>% filter(State == input$state1)  #subsets data by State
   })
   
-  numericvalues <- names(brfss2013[,sapply(brfss2013,is.numeric)])
-  charactervalues <- names(brfss2013[,sapply(brfss2013,is.character)])
+
   
   #data read in for Statewide participation table
   EDAFullCount <- reactive({brfss2013 %>% group_by(State) %>% summarize(count = n())})
@@ -235,13 +236,13 @@ server <- function(input, output, session) {
         if ((input$edavar1 %in% numericvalues) & (input$edavar2 %in% charactervalues)){
           getedaData2 <- getedaData1()[,c(input$edavar1, input$edavar2)]
           getedaData3 <- unlist(tapply(getedaData2[[1]], getedaData2[[2]], summary))
-        write.csv(rownames_to_column(as.data.frame(getedaData3)), file, row.names = FALSE)
-      }
+          write.csv(rownames_to_column(as.data.frame(getedaData3)), file, row.names = FALSE)
+        }
         else if ((input$edavar1 %in% charactervalues) & (input$edavar2 %in% numericvalues)){
           getedaData2 <- getedaData1()[,c(input$edavar1, input$edavar2)]
           getedaData3 <- unlist(tapply(getedaData2[[2]], getedaData2[[1]], summary))
-        write.csv(rownames_to_column(as.data.frame(getedaData3)), file, row.names = FALSE)
-      }
+          write.csv(rownames_to_column(as.data.frame(getedaData3)), file, row.names = FALSE)
+        }
         else if((input$edavar1 %in% numericvalues) & (input$edavar2 %in% numericvalues)){
           p <- summary(getedaData1()[,input$edavar1])
           write.csv((cbind(p, summary(getedaData1()[,input$edavar2]))), file, row.names = FALSE)
@@ -256,7 +257,7 @@ server <- function(input, output, session) {
       }
     }
   )
-    
+  
   
   #creates cool graph with Plotly
   
@@ -276,7 +277,7 @@ server <- function(input, output, session) {
       
       #for when the first var is numeric and the second is character
       if ((input$edavar1 %in% numericvalues) & (input$edavar2 %in% charactervalues)){
-          p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), color = ~get(input$edavar2), type = input$edagraphtype) %>% layout(xaxis = x)
+        p <- plot_ly(data = getedaData1(), x = ~get(input$edavar1), color = ~get(input$edavar2), type = input$edagraphtype) %>% layout(xaxis = x)
       }
       
       #for when the first var is character and the second is numeric
@@ -308,18 +309,12 @@ server <- function(input, output, session) {
   
   #Ensures X and Y variables are only numeric, otherwise clustering doesn't seem to want to work
   output$clusterxchoice <- renderUI({
-    # we only want to show numeric cols
-    brfssnumeric <- na.omit(brfss2013[,sapply(brfss2013,is.numeric)])
-    colnames <- names(brfssnumeric)
-    selectInput('clusterx', 'X Variable', colnames)
+    selectInput('clusterx', 'X Variable', numericvalues)
   })
   
   output$clusterychoice <- renderUI({
-    # we only want to show numeric cols
-    brfssnumeric <- na.omit(brfss2013[,sapply(brfss2013,is.numeric)])
-    colnames <- names(brfssnumeric)
-    selectInput('clustery', 'Y Variable', colnames,
-                selected=colnames[2])
+    selectInput('clustery', 'Y Variable', numericvalues,
+                selected=numericvalues[2])
   })  
   
   #filter data by State
@@ -416,17 +411,9 @@ server <- function(input, output, session) {
     newregData <- brfss2013 %>% filter(State == input$state3) 
   })
   
-  #next two reactives subset data further, removing observations with missing values in response varaible
-  outcome <- reactive({
-    hold <- paste0(input$linchoice)
-    
-  })
-  
   #show options for simple linear regression
   output$linearregressionchoiceout <- renderUI({
-    brfssnumeric <- na.omit(brfss2013[,sapply(brfss2013,is.numeric)])
-    colnames <- names(brfssnumeric)
-    selectInput('linchoice', 'Choose Outcome variable', colnames)
+    selectInput('linchoice', 'Choose Outcome variable', names(na.omit(getregData()[,numericvalues])))
   })
   
   #create formula portion of lm function here
@@ -436,7 +423,6 @@ server <- function(input, output, session) {
   
   #run regression model
   regressionmodel <- reactive({
-    #linear regression model
     model <- lm(regressionformula(), data = getregData())
   })
   
@@ -483,7 +469,7 @@ server <- function(input, output, session) {
   output$regpredictinput <- renderUI({
     
     
-    if (input$linpredictor %in% names(getregData()[,sapply(getregData(),is.character)])){
+    if (input$linpredictor %in% charactervalues){
       selectInput("charpredict", "Enter prediction category", choices = regcheckdata())
     }
     else {
@@ -493,7 +479,7 @@ server <- function(input, output, session) {
   
   output$regpredictfit <- renderPrint({
     
-    if(input$linpredictor %in% names(getregData()[,sapply(getregData(),is.character)])){
+    if(input$linpredictor %in% charactervalues){
       charframe <- data.frame(var =  input$charpredict)
       colnames(charframe) <- input$linpredictor      
       predict(regressionmodel(), newdata = charframe, se.fit = TRUE)
